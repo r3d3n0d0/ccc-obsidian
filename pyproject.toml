@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccc-obsidian"
+version = "1.0.0"
+description = "Save the Vatican Catechism as Obsidian notes in a folder you choose."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["beautifulsoup4>=4.12"]
+keywords = ["obsidian", "catechism", "markdown"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Environment :: Console",
+    "Topic :: Religion",
+]
+
+[project.scripts]
+ccc-obsidian = "scrape_ccc:main_cli"
+
+[tool.setuptools]
+py-modules = ["scrape_ccc"]
