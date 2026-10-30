@@ -551,7 +551,7 @@ def render_page(node, by_href, parsed, ordered_hrefs, present):
         elif block["kind"] == "quote":
             lines += [f"> {block['text']}", ""]
         elif block.get("num"):
-            lines += [f"**{block['num']}** {block['text']}", ""]
+            lines += [f"[CCC {block['num']}] {block['text']}", ""]
         else:
             lines += [f"{block['text']}", ""]
 

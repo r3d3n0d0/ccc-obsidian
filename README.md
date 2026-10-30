@@ -38,7 +38,7 @@ aliases: ["CCC 27", "CCC 28", "CCC 29", "CCC 30"]
 
 *PART ONE: THE PROFESSION OF FAITH > SECTION ONE "I BELIEVE" - "WE BELIEVE" > CHAPTER ONE MAN'S CAPACITY FOR GOD*
 
-**27** Paragraph text from the Vatican page.
+[CCC 27] Paragraph text from the Vatican page.
 
 [^1]: A footnote citation from the Vatican page.
 ***
@@ -183,7 +183,7 @@ The index has the alias `Catechism`, so `[[Catechism]]` opens it from anywhere i
 
 The Vatican pages are old HTML. The script keeps the reading order and turns the markup into Markdown.
 
-- A paragraph number at the start of a paragraph becomes bold: `**27**`.
+- A paragraph number is written on that paragraph's line as `[CCC 27]`, so a vault search for `CCC 27` opens the sentence. One pair of brackets keeps it a label. The same citation is an `aliases` entry, so the quick switcher and `[[CCC 27]]` open the section.
 - A short unnumbered line with no final period, such as "Above all - Charity" or "Part One: the Profession of Faith", becomes a `####` heading. A real sentence ends with `.`, `?`, or `!` and stays a paragraph.
 - A paragraph the Vatican indented, and an unnumbered paragraph that follows a line ending in a colon, becomes a blockquote.
 - Footnote markers become `[^1]`, with the citation under the body.
@@ -217,6 +217,22 @@ Notes are written after the downloads for that run, so previous/next can see whi
 The index page is `https://www.vatican.va/archive/ENG0015/_INDEX.HTM`. If the program says no table of contents was found, the Vatican markup may have changed.
 
 `curl` has to be on your `PATH`. The message `bs4 not installed` means Beautiful Soup is missing. Install it with `pip install -r requirements.txt` inside the same virtual environment you use to run the script.
+
+## Search the notes
+
+A paragraph you already know: open the quick switcher and type the alias, such as `CCC 27`. That opens the section. The paragraph line begins with `[CCC 27]`. Find on that page lands on the sentence.
+
+An idea: `obsidian/search-catechism.js` is a [QuickAdd](https://github.com/chhoumann/quickadd) user script. It asks for words and opens search limited to the Catechism folder.
+
+1. Install QuickAdd and turn it on.
+2. Copy `obsidian/search-catechism.js` into the vault, for example `scripts/search-catechism.js`.
+3. Set `FOLDER` at the top of the copy to the vault-relative path you passed to `--output`.
+4. In QuickAdd, add a Macro named `Search Catechism`. Turn on the command for that choice. Add one User Script command and point it at the copied file.
+5. Bind that command. Ctrl+Alt+C is a free binding on a typical setup.
+
+Several words stay one phrase, so `divine mercy` searches for those words together. Type `mercy OR merciful` when either word should count. Text selected in the editor fills the prompt.
+
+Obsidian treats `[` as the start of a property search. A query that requires `[CCC` on the line matches nothing, even when the paragraph contains the word. The script removes brackets before it builds the query. After you change the script, reload Obsidian, then run the command again.
 
 ## License
 
