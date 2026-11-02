@@ -8,6 +8,7 @@ You choose the folder. Nothing in this program points at a particular vault.
   python3 scrape_ccc.py --limit 3 -o /tmp/ccc-trial
   python3 scrape_ccc.py -o ~/Documents/MyVault/Catechism
   python3 scrape_ccc.py --skip-existing
+  python3 scrape_ccc.py --relink --bible ~/Documents/MyVault/Bible
 
 The first run with no --output asks where to write and remembers the answer
 on this computer only. See README.md for the how and the why.
@@ -17,6 +18,7 @@ There is a short pause between requests.
 """
 import argparse
 import html as html_lib
+import json
 import os
 import re
 import subprocess
@@ -24,16 +26,17 @@ import sys
 import time
 from pathlib import Path
 
+# --relink works on notes already on disk and does not need Beautiful Soup.
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    print("bs4 not installed — run: pip install beautifulsoup4")
-    sys.exit(1)
+    BeautifulSoup = None
 
 BASE_URL = "https://www.vatican.va/archive/ENG0015/"
 INDEX_URL = BASE_URL + "_INDEX.HTM"
 BOOK = "Catechism of the Catholic Church"
 INDEX_STEM = "00 - Catechism"
+PARAGRAPH_MAP = "ccc-paragraphs.json"
 PAUSE = 0.35
 RETRIES = 3
 RETRY_DELAY = 2
@@ -519,6 +522,357 @@ def refresh_nav(path, new_nav):
     return "updated"
 
 
+# ── links ─────────────────────────────────────────────────────────────────
+#
+# Obsidian resolves [[...]] by file name or path, not by aliases. The aliases
+# only feed the quick switcher. So [[CCC 1030]] is an empty link. A paragraph
+# link has to name the note and a block ID:
+#
+#   [[03 - III. The Final Purification, or Purgatory#^ccc-1030|CCC 1030]]
+#
+# Every numbered paragraph ends with ^ccc-N. ccc-paragraphs.json maps each
+# number to its link so other tools do not have to search for the note.
+
+PARA_LINE_RE = re.compile(r"^\[CCC (\d{1,4})\] ")
+BLOCK_ID_RE = re.compile(r"\s\^ccc-(\d{1,4})\s*$")
+FOOTNOTE_LINE_RE = re.compile(r"^\[\^\d+\]: ")
+
+
+def block_id(number):
+    return f"^ccc-{number}"
+
+
+def note_targets(paths, root):
+    """Shortest link target for each note: the file name when it is unique
+    under root, otherwise the path from root. Obsidian matches either."""
+    counts = {}
+    for path in paths:
+        counts[path.stem] = counts.get(path.stem, 0) + 1
+    targets = {}
+    for path in paths:
+        if counts[path.stem] == 1:
+            targets[path] = path.stem
+        else:
+            rel = path.relative_to(root)
+            targets[path] = (rel.parent / rel.stem).as_posix()
+    return targets
+
+
+def add_block_ids(lines):
+    """End each [CCC N] line with ^ccc-N. A number seen twice in one note
+    keeps its ID on the first line only, since a block ID must be unique.
+    Returns (lines, numbers in order)."""
+    seen = []
+    result = []
+    for line in lines:
+        match = PARA_LINE_RE.match(line)
+        if not match:
+            result.append(line)
+            continue
+        number = match.group(1)
+        bare = BLOCK_ID_RE.sub("", line).rstrip()
+        if number in seen:
+            result.append(bare)
+            continue
+        seen.append(number)
+        result.append(f"{bare} {block_id(number)}")
+    return result, seen
+
+
+# Vatican footnote abbreviations, and the forms other editions use, for each
+# book. The first name is the one the Bible notes are expected to use in their
+# aliases ("John 6"). The others are accepted in those aliases too.
+BIBLE_BOOKS = (
+    (("Genesis",), ("Gen", "Gn")),
+    (("Exodus",), ("Ex", "Exod")),
+    (("Leviticus",), ("Lev", "Lv")),
+    (("Numbers",), ("Num", "Nm")),
+    (("Deuteronomy",), ("Deut", "Dt")),
+    (("Joshua",), ("Josh", "Jos")),
+    (("Judges",), ("Judg", "Jgs")),
+    (("Ruth",), ("Ruth", "Ru")),
+    (("1 Samuel",), ("1 Sam", "1 Sm")),
+    (("2 Samuel",), ("2 Sam", "2 Sm")),
+    (("1 Kings",), ("1 Kings", "1 Kgs")),
+    (("2 Kings",), ("2 Kings", "2 Kgs")),
+    (("1 Chronicles",), ("1 Chr",)),
+    (("2 Chronicles",), ("2 Chr",)),
+    (("Ezra",), ("Ezra", "Ezr")),
+    (("Nehemiah",), ("Neh",)),
+    (("Tobit",), ("Tob", "Tb")),
+    (("Judith",), ("Jdt",)),
+    (("Esther",), ("Esth", "Est")),
+    (("1 Maccabees",), ("1 Macc", "1 Mc")),
+    (("2 Maccabees",), ("2 Macc", "2 Mc")),
+    (("Job",), ("Job", "Jb")),
+    (("Psalms", "Psalm"), ("Ps", "Pss", "Psal")),
+    (("Proverbs",), ("Prov", "Prv")),
+    (("Ecclesiastes", "Qoheleth"), ("Eccl", "Qoh")),
+    (("Song of Songs", "Song of Solomon"), ("Song", "Sg")),
+    (("Wisdom",), ("Wis",)),
+    (("Sirach",), ("Sir",)),
+    (("Isaiah",), ("Isa", "Is")),
+    (("Jeremiah",), ("Jer",)),
+    (("Lamentations",), ("Lam",)),
+    (("Baruch",), ("Bar",)),
+    (("Ezekiel",), ("Ezek", "Ez")),
+    (("Daniel",), ("Dan", "Dn")),
+    (("Hosea",), ("Hos",)),
+    (("Joel",), ("Joel", "Jl")),
+    (("Amos",), ("Am", "Amos")),
+    (("Obadiah",), ("Obad", "Ob")),
+    (("Jonah",), ("Jon", "Jonah")),
+    (("Micah",), ("Mic", "Mi")),
+    (("Nahum",), ("Nah", "Na")),
+    (("Habakkuk",), ("Hab", "Hb")),
+    (("Zephaniah",), ("Zeph", "Zep")),
+    (("Haggai",), ("Hag", "Hg")),
+    (("Zechariah",), ("Zech", "Zec")),
+    (("Malachi",), ("Mal",)),
+    (("Matthew",), ("Mt", "Matt")),
+    (("Mark",), ("Mk",)),
+    (("Luke",), ("Lk",)),
+    (("John",), ("Jn",)),
+    (("Acts of the Apostles", "Acts"), ("Acts",)),
+    (("Romans",), ("Rom",)),
+    (("1 Corinthians",), ("1 Cor",)),
+    (("2 Corinthians",), ("2 Cor",)),
+    (("Galatians",), ("Gal",)),
+    (("Ephesians",), ("Eph",)),
+    (("Philippians",), ("Phil",)),
+    (("Colossians",), ("Col",)),
+    (("1 Thessalonians",), ("1 Thess", "1 Thes", "1 Th")),
+    (("2 Thessalonians",), ("2 Thess", "2 Thes", "2 Th")),
+    (("1 Timothy",), ("1 Tim", "1 Tm")),
+    (("2 Timothy",), ("2 Tim", "2 Tm")),
+    (("Titus",), ("Titus", "Tit", "Ti")),
+    (("Philemon",), ("Philem", "Phlm")),
+    (("Hebrews",), ("Heb",)),
+    (("James",), ("Jas",)),
+    (("1 Peter",), ("1 Pet", "1 Pt")),
+    (("2 Peter",), ("2 Pet", "2 Pt")),
+    (("1 John",), ("1 Jn",)),
+    (("2 John",), ("2 Jn",)),
+    (("3 John",), ("3 Jn",)),
+    (("Jude",), ("Jude",)),
+    (("Revelation", "Apocalypse"), ("Rev", "Rv", "Apoc")),
+)
+
+# Misreadings in the Vatican footnotes: "In 8:32" for Jn, "1 In" for 1 Jn,
+# "Cal" for Gal, and capitals such as "EX 20:17" and "PS 51:4".
+_SCAN_ERRORS = {"In": "Jn", "1 In": "1 Jn", "Cal": "Gal", "EX": "Ex", "PS": "Ps"}
+
+_BOOK_BY_NAME = {}
+_BOOK_BY_ABBR = {}
+for _names, _abbrs in BIBLE_BOOKS:
+    for _name in _names:
+        _BOOK_BY_NAME[_name.lower()] = _names[0]
+    for _abbr in _abbrs:
+        _BOOK_BY_ABBR[_abbr.lower()] = _names[0]
+for _wrong, _right in _SCAN_ERRORS.items():
+    _BOOK_BY_ABBR.setdefault(_wrong.lower(), _BOOK_BY_ABBR[_right.lower()])
+
+_ROMAN = {"I": "1", "II": "2", "III": "3"}
+
+
+def _abbr_pattern(abbr):
+    """Regex for one abbreviation. "1 Cor" also matches "1Cor" and "I Cor"."""
+    match = re.match(r"^([1-3]) (.+)$", abbr)
+    if not match:
+        return re.escape(abbr)
+    roman = "I" * int(match.group(1))
+    return rf"(?:{match.group(1)}|{roman})\s?{re.escape(match.group(2))}"
+
+
+def _book_for(abbr):
+    """Book name for an abbreviation as written in a footnote."""
+    abbr = re.sub(r"\s+", " ", abbr).strip()
+    match = re.match(r"^(III|II|I|[1-3]) ?(\S.*)$", abbr)
+    if match and (match.group(1)[0].isdigit() or match.group(2)[0].isupper()):
+        abbr = f"{_ROMAN.get(match.group(1), match.group(1))} {match.group(2)}"
+    return _BOOK_BY_ABBR.get(abbr.lower())
+
+
+_ALL_ABBRS = {a for _, abbrs in BIBLE_BOOKS for a in abbrs} | set(_SCAN_ERRORS)
+_ABBR_PATTERN = "|".join(
+    _abbr_pattern(abbr) for abbr in sorted(_ALL_ABBRS, key=len, reverse=True))
+_VERSE = r"\d+[a-z]?(?:\s*[-–]\s*\d+[a-z]?(?!\d|:))?"
+# "Jn 6:39", "1 Cor 13:4-7, 13", and a following "; 10:28" in the same book.
+SCRIPTURE_RE = re.compile(
+    r"(?:(?<![\w\[|])(?P<book>" + _ABBR_PATTERN + r")\.?\s+|(?P<semi>;\s*(?:cf\.\s*)?))"
+    r"(?P<ch>\d{1,3}):(?P<vs>" + _VERSE + r"(?:,\s*" + _VERSE + r"(?!\d|:))*)")
+
+
+def _frontmatter_aliases(text):
+    """aliases from YAML front matter, as an inline [a, b] list or - items.
+    The key is matched without regard to case."""
+    if not text.startswith("---"):
+        return []
+    end = text.find("\n---", 3)
+    if end == -1:
+        return []
+    aliases = []
+    in_list = False
+    for line in text[3:end].splitlines():
+        match = re.match(r"^aliases\s*:\s*(.*)$", line, re.I)
+        if match:
+            value = match.group(1).strip()
+            if value.startswith("["):
+                aliases += [item.strip().strip("'\"") for item in value.strip("[]").split(",")]
+            elif value:
+                aliases.append(value.strip("'\""))
+            in_list = not value
+            continue
+        if in_list and re.match(r"^\s*-\s+", line):
+            aliases.append(re.sub(r"^\s*-\s+", "", line).strip().strip("'\""))
+        elif in_list and line.strip():
+            in_list = False
+    return [alias for alias in aliases if alias]
+
+
+class BibleIndex:
+    """Chapter notes in a Bible folder, found by "Book N" aliases or by
+    file names like Jn-06, and the section heading that holds each verse."""
+
+    def __init__(self, folder):
+        self.folder = Path(folder)
+        self.chapters = {}
+        self._headings = {}
+        paths = sorted(self.folder.rglob("*.md"))
+        self.targets = note_targets(paths, self.folder)
+        for path in paths:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            keys = []
+            for alias in _frontmatter_aliases(text):
+                match = re.match(r"^(.+?)\s+(\d{1,3})$", alias)
+                book = match and _BOOK_BY_NAME.get(match.group(1).lower())
+                if book:
+                    keys.append((book, int(match.group(2))))
+            if not keys:
+                match = re.match(r"^(.+?)-(\d{1,3})$", path.stem)
+                book = match and _BOOK_BY_ABBR.get(match.group(1).lower())
+                if book:
+                    keys.append((book, int(match.group(2))))
+            for key in keys:
+                self.chapters.setdefault(key, path)
+
+    def heading_for(self, path, verse):
+        """The ## heading above [verse] in the chapter note, or None."""
+        if path not in self._headings:
+            by_verse = {}
+            heading = None
+            for line in path.read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^#{2,6}\s+(.+?)\s*$", line)
+                if match:
+                    heading = match.group(1)
+                    continue
+                for number in re.findall(r"\[(\d{1,3})\]", line):
+                    by_verse.setdefault(int(number), heading)
+            self._headings[path] = by_verse
+        return self._headings[path].get(verse)
+
+    def target(self, book, chapter, verse=None):
+        path = self.chapters.get((book, chapter))
+        if path is None:
+            return None
+        target = self.targets[path]
+        heading = self.heading_for(path, verse) if verse else None
+        # Obsidian cannot link to a heading that has these characters.
+        if heading and not re.search(r"[#|^\[\]]", heading):
+            target += f"#{heading}"
+        return target
+
+
+def link_scripture(line, bible):
+    """Turn Bible citations on a footnote line into links. A line that
+    already has a wikilink is left alone, so a second run changes nothing."""
+    if "[[" in line or not FOOTNOTE_LINE_RE.match(line):
+        return line
+    current = None
+    parts = []
+    last = 0
+    for match in SCRIPTURE_RE.finditer(line):
+        if match.group("book"):
+            current = _book_for(match.group("book"))
+        elif last == 0 or match.start() != last:
+            # "; 10:28" continues the book only right after a linked citation.
+            # After "St. Augustine, Serm. 2" it is not Scripture.
+            continue
+        if current is None:
+            continue
+        first_verse = int(re.match(r"\d+", match.group("vs")).group())
+        target = bible.target(current, int(match.group("ch")), first_verse)
+        if target is None:
+            continue
+        start = match.start("ch") if match.group("semi") else match.start("book")
+        shown = line[start:match.end()]
+        parts += [line[last:start], wikilink(target, shown)]
+        last = match.end()
+    if not parts:
+        return line
+    return "".join(parts) + line[last:]
+
+
+def relink(out, bible_folder=None):
+    """Add block IDs and Bible links to the notes on disk and write
+    ccc-paragraphs.json. Does not download anything. Safe to run again."""
+    out = Path(out)
+    bible = None
+    if bible_folder:
+        bible = BibleIndex(bible_folder)
+        print(f"[*] Bible: {len(bible.chapters)} chapter notes in {bible.folder}")
+        if not bible.chapters:
+            print("  No chapter notes found. Expected aliases like \"John 6\" "
+                  "or file names like Jn-06.md. Footnotes left unlinked.")
+            bible = None
+
+    paths = sorted(path for path in out.rglob("*.md") if path.name != f"{INDEX_STEM}.md")
+    targets = note_targets(paths, out)
+    paragraphs = {}
+    duplicates = []
+    changed = 0
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"  ERROR reading {path.name}: {exc}")
+            continue
+        lines, numbers = add_block_ids(text.splitlines())
+        if bible:
+            lines = [link_scripture(line, bible) for line in lines]
+        new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+        if new_text != text:
+            try:
+                path.write_text(new_text, encoding="utf-8")
+            except OSError as exc:
+                print(f"  ERROR writing {path.name}: {exc}")
+                continue
+            changed += 1
+        for number in numbers:
+            if number in paragraphs:
+                duplicates.append(number)
+                continue
+            target = f"{targets[path]}#{block_id(number)}"
+            paragraphs[number] = {
+                "file": path.relative_to(out).as_posix(),
+                "target": target,
+                "link": f"[[{target}|CCC {number}]]",
+            }
+
+    ordered = {key: paragraphs[key] for key in sorted(paragraphs, key=int)}
+    map_path = out / PARAGRAPH_MAP
+    map_path.write_text(json.dumps(ordered, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"[*] Links: {changed} of {len(paths)} notes updated, "
+          f"{len(ordered)} paragraphs in {map_path.name}")
+    if duplicates:
+        print(f"  Paragraph numbers in more than one note, first one kept: "
+              f"{', '.join(sorted(set(duplicates), key=int))}")
+    return ordered
+
+
 def render_page(node, by_href, parsed, ordered_hrefs, present):
     """Return (filename, markdown). Filename is None when the page has no body.
 
@@ -551,7 +905,7 @@ def render_page(node, by_href, parsed, ordered_hrefs, present):
         elif block["kind"] == "quote":
             lines += [f"> {block['text']}", ""]
         elif block.get("num"):
-            lines += [f"[CCC {block['num']}] {block['text']}", ""]
+            lines += [f"[CCC {block['num']}] {block['text']} {block_id(block['num'])}", ""]
         else:
             lines += [f"{block['text']}", ""]
 
@@ -632,7 +986,11 @@ def render_index(tree, present, link_names):
 
 # ── driver ────────────────────────────────────────────────────────────────
 
-def main(output_dir, dry_run=False, skip_existing=False, limit=None, link_names=None):
+def main(output_dir, dry_run=False, skip_existing=False, limit=None, link_names=None,
+         bible_folder=None):
+    if BeautifulSoup is None:
+        print("bs4 not installed — run: pip install beautifulsoup4")
+        sys.exit(1)
     out = Path(output_dir)
     link_names = list(link_names or [])
     print(f"[*] Output folder: {out}")
@@ -789,6 +1147,8 @@ def main(output_dir, dry_run=False, skip_existing=False, limit=None, link_names=
         print(f"ERROR writing {index_path.name}: {exc}")
         sys.exit(1)
     print(f"[*] Written: {index_path.name}")
+    # Notes skipped by --skip-existing get block IDs here too.
+    relink(out, bible_folder)
     print()
     print("=== DONE ===")
     problems = failed + write_failed
@@ -929,6 +1289,16 @@ def parse_args(argv=None):
         "--limit", type=int, default=None,
         help="Download only the first N section pages. Use with -o pointing "
              "at a trial folder, not your vault.")
+    parser.add_argument(
+        "--relink", action="store_true",
+        help="Add paragraph block IDs (and Bible links with --bible) to the notes "
+             "already in the folder and rewrite ccc-paragraphs.json. "
+             "Does not download anything.")
+    parser.add_argument(
+        "--bible", default=None, metavar="FOLDER",
+        help="Optional. Your own Bible notes folder; no Bible is included. Footnote "
+             "citations such as Jn 6:39 link to its chapter notes, found by aliases "
+             "like \"John 6\" or names like Jn-06.md. The notes are only read.")
     return parser
 
 
@@ -965,6 +1335,16 @@ def main_cli(argv=None):
         remember_output(folder)
     elif source == "option" and vault_root(folder) is None:
         print("Note: no .obsidian folder above this path. That is fine for a trial.")
+    bible_folder = None
+    if args.bible:
+        bible_folder = Path(args.bible).expanduser().resolve()
+        if not bible_folder.is_dir():
+            parser.error(f"--bible is not a folder: {bible_folder}")
+    if args.relink:
+        if not folder.is_dir():
+            parser.error(f"--relink needs the folder of notes, and this is not one: {folder}")
+        relink(folder, bible_folder)
+        return
     link_names = []
     for name in args.link or []:
         cleaned = name.strip()
@@ -974,7 +1354,7 @@ def main_cli(argv=None):
         if cleaned:
             link_names.append(cleaned)
     main(folder, dry_run=args.dry_run, skip_existing=args.skip_existing,
-         limit=args.limit, link_names=link_names)
+         limit=args.limit, link_names=link_names, bible_folder=bible_folder)
 
 
 if __name__ == "__main__":
