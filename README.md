@@ -1,31 +1,27 @@
 # Catechism notes for Obsidian
 
-Save the English *Catechism of the Catholic Church* from [vatican.va](https://www.vatican.va/archive/ENG0015/_INDEX.HTM) as one Obsidian note per section.
+Save the English *Catechism of the Catholic Church* from [vatican.va](https://www.vatican.va/archive/ENG0015/_INDEX.HTM) as one Obsidian note per section, with links you can point at any numbered paragraph.
 
-This repository is the program only. It does not contain the text of the Catechism. The program downloads the public pages into a folder you choose. That text is copyright [Libreria Editrice Vaticana](https://www.vatican.va/archive/ENG0015/_INDEX.HTM). Keep the notes in a private vault. Do not publish the generated notes as your own work.
-
-You choose the folder. The program does not look for a vault and does not ship with anyone's path in it.
+This repository is the program only. It downloads the public pages into a folder you choose. The text is copyright [Libreria Editrice Vaticana](https://www.vatican.va/archive/ENG0015/_INDEX.HTM): keep the notes in a private vault and do not publish them as your own work.
 
 ## What you get
 
-A folder of Markdown notes that follows the table of contents. Obsidian sorts file names from A to Z, so each sibling is numbered and the list matches the book.
+A folder of 374 section notes plus an index, numbered so Obsidian's A-to-Z sort matches the book:
 
 ```text
 00 - Catechism.md
 01 - PROLOGUE/
     00 - PROLOGUE.md
     01 - I. The life of man - to know and love God.md
-    02 - II. Handing on the Faith - Catechesis.md
 02 - PART ONE - THE PROFESSION OF FAITH/
     01 - SEC. ONE I BELIEVE - WE BELIEVE/
         01 - CH. ONE MAN'S CAPACITY FOR GOD/
             01 - I. The Desire for God.md
             05 - IN BRIEF.md
+ccc-paragraphs.json
 ```
 
-A full run writes 374 section notes plus the index. It pauses between requests, so expect a few minutes.
-
-A section note looks like this. The paragraph below is a stand-in, not the Vatican text:
+A section note looks like this (the paragraph is a stand-in, not the Vatican text):
 
 ```markdown
 ---
@@ -44,9 +40,7 @@ aliases: ["CCC 27", "CCC 28", "CCC 29", "CCC 30"]
 ***
 ```
 
-The `^ccc-27` at the end of the paragraph is a block ID. Obsidian hides it in reading view. It is what a link to that one paragraph points at. See [Link to a paragraph](#link-to-a-paragraph).
-
-The heading and the link label keep the Vatican title. The file name is the shortened, numbered form.
+`^ccc-27` is a block ID. Obsidian hides it in reading view; it is what a paragraph link points at.
 
 ## Install
 
@@ -60,163 +54,39 @@ python3 -m venv .venv
 .venv/bin/python scrape_ccc.py --help
 ```
 
-On Windows, use `py -3 -m venv .venv` and `.venv\Scripts\python scrape_ccc.py --help`. `curl` is included with Windows 10 and later.
+On Windows, use `py -3 -m venv .venv` and `.venv\Scripts\python`. `pip install .` also works; the command is then `ccc-obsidian`.
 
-`pip install .` also works. After that, the command is `ccc-obsidian`.
+## Use
 
-## Choose a folder
-
-The program has no default folder. It uses the first of these that is set:
-
-1. `--output` or `-o` for this run only
-2. The `CCC_OUTPUT` environment variable
-3. The folder saved last time you answered the question
-
-If none of those is set, and you are at a terminal, it asks. It does not guess.
-
-```text
-Where should the notes be written?
-
-Choose a folder inside your Obsidian vault. It is created if needed.
-Example: ~/Documents/MyVault/Catechism
-```
-
-Point it at a folder inside the vault, the same way you would create any other folder of notes. `Catechism` is a reasonable name. Put it next to your other reference notes, or wherever you want it. The program creates the folder.
-
-It looks upward for a `.obsidian` directory. If it does not find one, it says so and asks you to confirm. That warning is expected for a trial in `/tmp`. Say yes only when you mean to write outside a vault.
-
-The answer is stored on your computer, not in this repository:
-
-| System | Saved path |
-| --- | --- |
-| Linux and macOS | `~/.config/ccc-obsidian/output-dir` |
-| Windows | `%APPDATA%\ccc-obsidian\output-dir` |
-
-`XDG_CONFIG_HOME` is honored on Linux and macOS. Do not commit that file. To see it, run `--where`. To clear it, run `--forget-output`.
-
-### Try a few pages first
-
-Use a trial folder. `--limit` rewrites the index so the sections you did not download appear as plain titles. You do not want that rewrite in the vault.
+Try a few pages in a trial folder first. `--limit` leaves the rest out of the index and links, so keep it out of your vault:
 
 ```bash
 .venv/bin/python scrape_ccc.py --limit 3 -o /tmp/ccc-trial
 ```
 
-Open `/tmp/ccc-trial/00 - Catechism.md` and one section note. When the shape looks right, run the full copy into the vault.
-
-### Write into the vault
+When the notes look right, write the full copy into a folder inside your vault. A full run takes a few minutes.
 
 ```bash
-.venv/bin/python scrape_ccc.py \
-  -o ~/Documents/MyVault/Catechism \
-  --save-output
+.venv/bin/python scrape_ccc.py -o ~/Documents/MyVault/Catechism --save-output
 ```
 
-`--save-output` remembers that folder. The next run can omit `-o`.
+Later runs can omit `-o`. To pick up pages that failed, run again with `--skip-existing`, which downloads only the missing notes and refreshes the links in the rest. To re-download a page whose old note is still there, run without it.
 
-If the vault already has a note the index should point at, name it with `--link`. Repeat the flag for more than one note. The name is the note's title, without brackets.
+**Which folder is used.** The first of these that is set: `-o`, the `CCC_OUTPUT` environment variable, or the folder saved by `--save-output` (or by answering the question the program asks when nothing is set). The saved path lives in `~/.config/ccc-obsidian/output-dir`, or `%APPDATA%\ccc-obsidian\output-dir` on Windows. `--where` prints it and `--forget-output` clears it. The program warns before writing to a folder that is not inside a vault.
 
-```bash
-.venv/bin/python scrape_ccc.py -o ~/Documents/MyVault/Catechism --link Bible
-```
+## Linking
 
-Without `--link`, the index does not point at any other note. There is no assumed Bible folder.
+### Link to a paragraph
 
-### Run it again
-
-```bash
-.venv/bin/python scrape_ccc.py --skip-existing
-```
-
-This uses the saved folder. It does not download a section whose note is already there. It does refresh previous/next links, and it rewrites the index. Use it to pick up pages that failed the first time.
-
-If a page failed and the old note is still on disk, `--skip-existing` will not replace it. Run again without `--skip-existing` to download that page fresh.
-
-```bash
-.venv/bin/python scrape_ccc.py --where
-.venv/bin/python scrape_ccc.py --forget-output
-```
-
-## Why the notes look like this
-
-### Numbers, so the file list matches the book
-
-Obsidian sorts names from A to Z. It does not understand "two" before "three", or "Article 2" before "Article 10".
-
-Without a prefix, the top of the folder would be Part Four, then Part One, then Part Three, then Part Two, then the Prologue. Chapter Three would sit above Chapter Two. Article 10 would sit above Article 4.
-
-Each group of siblings is numbered `01`, `02`, `03` in table-of-contents order. Two digits are enough. The widest group in the book is well under 100.
-
-A part, section, chapter, or article that has children becomes a folder. If that heading also has its own page, the note is `00 - Title.md` inside the folder, so the section itself stays above its children. The index uses the same idea: `00 - Catechism.md`.
-
-Part One and Part Four are headings on the Vatican site with no page of their own. Those folders have no `00` note.
-
-### Short labels, so the long titles are readable
-
-`CHAPTER`, `SECTION`, `Article`, and `Paragraph` begin a large share of the names. Spelling them out pushes the real title off the edge of the file list. In the file and folder name they become `CH.`, `SEC.`, `Art.`, and `Para.`.
-
-`PART` and `PROLOGUE` stay. They are short, and they are the landmarks at the top of the book.
-
-Only the leading structural word is shortened. "I BELIEVE IN JESUS CHRIST, THE ONLY SON OF GOD" is still there. The heading inside the note is the Vatican line, including colons and quotation marks. A wikilink shows that same line. The short name is only for the file list.
-
-### File names Obsidian will accept
-
-Obsidian rejects these characters in a note name: `\ / : * ? " < > | # ^ [ ]`.
-
-A colon becomes ` - `, so "PART ONE: THE PROFESSION OF FAITH" is stored as `PART ONE - THE PROFESSION OF FAITH`. Quotation marks and question marks are removed from the file name. `IV. How Can We Speak about God?` is stored as `IV. How Can We Speak about God`. The heading in the note still has the question mark.
-
-Titles contain periods (`I.`, `CH.`, `Para. 1.`). The program adds `.md` as plain text. Treating the last period as a file extension would save `I. The Desire for God` as `I.md`.
-
-### Links that point at notes you actually have
-
-The path in a wikilink is unique. The label is the title you want to read:
-
-```markdown
-[[02 - CH. ONE MAN'S CAPACITY FOR GOD/05 - IN BRIEF|IN BRIEF]]
-```
-
-Many sections are named "IN BRIEF". The folder path tells them apart, so the alias is the title, not a second copy of the path.
-
-Previous and next follow the table of contents. They do not follow the Previous and Next controls on the Vatican page, because those can disagree with the outline. An arrow points only at a note that exists. If a download failed, or `--limit` stopped early, the arrow steps over the gap to the nearest note that was written. A later run rewrites the arrows once the missing note is there. A page with no body text is left out of the index and out of the arrows.
-
-The index has the alias `Catechism`, so the quick switcher finds it by that name. Each numbered paragraph is also an alias, such as `CCC 27`, so the quick switcher can jump to its section. The property name is `aliases`, which is what Obsidian recognizes.
-
-An alias is not a link target. Obsidian resolves `[[...]]` by file name or path only, so `[[CCC 27]]` and `[[Catechism]]` typed by hand are empty links. When you pick an alias from the `[[` suggestions, Obsidian writes the file name for you, as `[[file name|CCC 27]]`. To link a paragraph, use the forms in [Link to a paragraph](#link-to-a-paragraph).
-
-### Headings, quotations, and footnotes
-
-The Vatican pages are old HTML. The script keeps the reading order and turns the markup into Markdown.
-
-- A paragraph number is written on that paragraph's line as `[CCC 27]`, so a vault search for `CCC 27` opens the sentence. One pair of brackets keeps it a label. The same citation is an `aliases` entry, so the quick switcher opens the section. The line ends with the block ID `^ccc-27`.
-- A short unnumbered line with no final period, such as "Above all - Charity" or "Part One: the Profession of Faith", becomes a `####` heading. A real sentence ends with `.`, `?`, or `!` and stays a paragraph.
-- A paragraph the Vatican indented, and an unnumbered paragraph that follows a line ending in a colon, becomes a blockquote.
-- Footnote markers become `[^1]`, with the citation under the body.
-
-The breadcrumb under the title comes from the page's outline trail, not from the bold running headers. Those headers repeat the section name and are dropped.
-
-### A polite download
-
-The pages live on vatican.va. The program waits 0.35 seconds after each section page. `curl` retries a timeout, a refused connection, and HTTP 408, 429, and server errors, up to three times. Pages are decoded as Latin-1, which is the charset those pages declare.
-
-Notes are written after the downloads for that run, so previous/next can see which files succeeded. The program exits with status 1 if any page failed. The summary tells you whether to re-run with `--skip-existing` (the note was never written) or without it (an older note is still there and was left unchanged).
-
-## Link to a paragraph
-
-Each numbered paragraph ends with a block ID, `^ccc-` and the number. A link names the note and that ID:
+Obsidian resolves `[[...]]` by file name, not by alias. The `CCC 27` aliases let the quick switcher find a section, but a hand-typed `[[CCC 27]]` is an empty link. A paragraph link names the note and the block ID:
 
 ```markdown
 [[03 - III. The Final Purification, or Purgatory#^ccc-1030|CCC 1030]]
 ```
 
-Click it and Obsidian opens the section at that paragraph. Hover over it and the preview shows only that paragraph. Put `!` in front to show the paragraph's text in another note:
+Clicking it opens the section at that paragraph, and hovering previews only that paragraph. With `!` in front, it embeds the paragraph's text. A numbered paragraph that continues in a quotation below it shows only the numbered part.
 
-```markdown
-![[03 - III. The Final Purification, or Purgatory#^ccc-1030]]
-```
-
-A block is one Markdown paragraph. When a numbered paragraph goes on in a quotation below it, the link and the embed show the numbered part only.
-
-You do not have to look up the note. Every run writes `ccc-paragraphs.json` next to the index:
+You do not have to look up the note. Every run writes `ccc-paragraphs.json` next to the index, with a ready link for each number:
 
 ```json
 {
@@ -228,52 +98,55 @@ You do not have to look up the note. Every run writes `ccc-paragraphs.json` next
 }
 ```
 
-`link` is ready to paste. `target` is the part before the `|`. It is the file name when that name is unique in the folder. A few names repeat, such as "IN BRIEF". For those, `target` is the path from the Catechism folder, which Obsidian also resolves. A script, a template, or an AI assistant that writes notes can read this file and get every link right without searching.
+`target` is the file name, or the path from the Catechism folder when the name repeats (as "IN BRIEF" does). A script, template, or AI assistant can read this file to write correct links. To insert links by hand, see [Obsidian scripts](#obsidian-scripts).
 
-To insert links while you write, see `obsidian/insert-ccc-link.js` under [Search the notes](#search-the-notes).
+### Add links to notes you already have
+
+`--relink` adds missing block IDs to the notes in the folder and rewrites `ccc-paragraphs.json`. It downloads nothing and does not need Beautiful Soup. It changes only `[CCC N]` lines and footnote lines, and a second run changes nothing. A normal run does the same at the end.
+
+```bash
+.venv/bin/python scrape_ccc.py --relink
+```
 
 ### Bible links in footnotes (optional)
 
-This program does not download or include a Bible. This step is only for a vault that already has one, as one note per chapter. Without `--bible`, footnotes stay plain text and nothing else changes. The Bible notes are read, never modified.
-
-**What the Bible notes need**
-
-- One note per chapter, anywhere under the folder you pass. Subfolders are fine.
-- A way to identify the chapter: an `aliases` entry with the book and chapter, such as `John 6`, or a file name made of an abbreviation and number, such as `Jn-06.md`.
-- Optional: `##` section headings and verse markers such as `[39]`. With them, a link opens the section containing that verse. Without them, it opens the chapter.
-
-Book names follow common English usage (`Psalms` or `Psalm`, `Song of Songs` or `Song of Solomon`). If your notes use other names, add them to `BIBLE_BOOKS` in `scrape_ccc.py`.
-
-The link goes to whatever translation your notes contain. The Catechism quotes its own translation, so the wording may differ.
-
-**Running it**
-
-Pass the Bible folder with `--bible`, on a normal run or with `--relink`:
+This program does not download or include a Bible. `--bible` is only for a vault that already has one, as one note per chapter. Without it, footnotes stay plain text. The Bible notes are read, never changed.
 
 ```bash
 .venv/bin/python scrape_ccc.py --relink --bible ~/Documents/MyVault/Bible
 ```
 
-A footnote such as `Cf. Jn 6:39; 10:28` becomes links to the chapter notes:
+A footnote such as `Cf. Jn 6:39; 10:28` then becomes:
 
 ```markdown
 Cf. [[Jn-06#The Bread from Heaven|Jn 6:39]]; [[Jn-10#Jesus Is Rejected by the Jews|10:28]]
 ```
 
-The footnotes use the Vatican's abbreviations (`Gen`, `1 Pet`, `Rev`). The shorter forms (`Gn`, `1 Pt`, `Rv`) are recognized too, along with misreadings in the Vatican footnotes such as `I Cor`, `In 8:32` for John, and `EX 20:17`.
+What the Bible notes need:
 
-Citations to a chapter the folder does not have are left as text. So are citations without a verse, such as `Ps 51`, and non-biblical sources such as `DS 1820` and `PL 77, 396`. A footnote that already has a `[[` link is left alone, so running again changes nothing.
+- One note per chapter, anywhere under the folder. Subfolders are fine.
+- An `aliases` entry such as `John 6`, or a file name such as `Jn-06.md`.
+- Optional: `##` headings and verse markers such as `[39]`. With them, a link opens the section containing the verse; without them, the chapter.
 
-### Add links to notes you already have
+Book names follow common English usage (`Psalms` or `Psalm`, `Song of Songs` or `Song of Solomon`). Add others to `BIBLE_BOOKS` in `scrape_ccc.py`. Both the Vatican abbreviations (`Gen`, `1 Pet`) and shorter forms (`Gn`, `1 Pt`) are recognized, as are misreadings in the footnotes such as `I Cor` and `In 8:32` for John.
 
-`--relink` works on the notes in the folder. It adds missing block IDs, adds Bible links when you pass `--bible`, and rewrites `ccc-paragraphs.json`. It does not download anything, and it does not need Beautiful Soup.
+Left as text: chapters the folder lacks, citations without a verse (`Ps 51`), and non-biblical sources (`DS 1820`). The link opens your translation, so the wording may differ from the Catechism's quotation.
 
-```bash
-.venv/bin/python scrape_ccc.py --relink
-.venv/bin/python scrape_ccc.py --relink --bible ~/Documents/MyVault/Bible
-```
+## Obsidian scripts
 
-It changes only `[CCC N]` lines and footnote lines. Anything else you wrote in a note stays as it is. A normal run does the same step at the end, so notes kept by `--skip-existing` get block IDs too.
+Two [QuickAdd](https://github.com/chhoumann/quickadd) user scripts are in `obsidian/`:
+
+- `search-catechism.js` asks for words and opens search limited to the Catechism folder. `divine mercy` searches for the phrase; `mercy OR merciful` for either word.
+- `insert-ccc-link.js` asks for a paragraph number and inserts its link from `ccc-paragraphs.json`. `1030, 1032` and `1030-1032` insert several.
+
+In both, text selected in the editor fills the prompt. To set one up:
+
+1. Install QuickAdd and turn it on.
+2. Copy the script into the vault, for example `scripts/insert-ccc-link.js`, and set `FOLDER` at the top to the vault-relative path of the Catechism folder.
+3. In QuickAdd, add a Macro choice, add the script under **User scripts**, and turn on the choice's command (the lightning bolt).
+4. Optionally bind a hotkey under Settings → Hotkeys.
+
+After you change a script, reload Obsidian.
 
 ## Options
 
@@ -284,39 +157,30 @@ It changes only `[CCC N]` lines and footnote lines. Anything else you wrote in a
 | `--where` | Print the folder that would be used, then exit. |
 | `--forget-output` | Delete the saved folder. The next run asks again. |
 | `--link NOTE` | Link this vault note from the index. Repeat for more than one. |
-| `--dry-run`, `-n` | Fetch the index and list file names. Do not download sections. |
-| `--limit N` | Download only the first N sections. Point `-o` at a trial folder. |
-| `--skip-existing` | Skip a download when the note is already there. Still refresh links. |
-| `--relink` | Add block IDs and Bible links to the notes on disk, and rewrite `ccc-paragraphs.json`. No downloads. |
-| `--bible FOLDER` | Optional. Your own Bible chapter notes, to link footnote citations to. No Bible is included. Works with a normal run and with `--relink`. |
+| `--dry-run`, `-n` | Fetch the index and list file names. Download no sections. |
+| `--limit N` | Download only the first N sections. Use a trial folder. |
+| `--skip-existing` | Skip sections whose note exists. Still refresh links. |
+| `--relink` | Add block IDs (and Bible links with `--bible`) to the notes on disk and rewrite `ccc-paragraphs.json`. No downloads. |
+| `--bible FOLDER` | Optional. Your own Bible chapter notes; none is included. |
 | `CCC_OUTPUT` | Environment variable. Used when `-o` is absent. |
-
-`--limit` and a failed download both leave later sections out of the links until a run downloads them. That is why a partial run belongs in a trial folder.
 
 ## If a run fails
 
-The index page is `https://www.vatican.va/archive/ENG0015/_INDEX.HTM`. If the program says no table of contents was found, the Vatican markup may have changed.
+- "No table of contents found" means the Vatican markup at `https://www.vatican.va/archive/ENG0015/_INDEX.HTM` may have changed.
+- `bs4 not installed` means Beautiful Soup is missing from the virtual environment you are using.
+- `curl` has to be on your `PATH`.
 
-`curl` has to be on your `PATH`. The message `bs4 not installed` means Beautiful Soup is missing. Install it with `pip install -r requirements.txt` inside the same virtual environment you use to run the script.
+The program exits with status 1 if any page failed, and its summary says whether to re-run with or without `--skip-existing`.
 
-## Search the notes
+## Note format
 
-A paragraph you already know: open the quick switcher and type the alias, such as `CCC 27`. That opens the section. The paragraph line begins with `[CCC 27]`. Find on that page lands on the sentence.
-
-An idea: `obsidian/search-catechism.js` is a [QuickAdd](https://github.com/chhoumann/quickadd) user script. It asks for words and opens search limited to the Catechism folder.
-
-1. Install QuickAdd and turn it on.
-2. Copy `obsidian/search-catechism.js` into the vault, for example `scripts/search-catechism.js`.
-3. Set `FOLDER` at the top of the copy to the vault-relative path you passed to `--output`.
-4. In QuickAdd, add a Macro named `Search Catechism`. Turn on the command for that choice. Add one User Script command and point it at the copied file.
-5. Bind that command. Ctrl+Alt+C is a free binding on a typical setup.
-
-Several words stay one phrase, so `divine mercy` searches for those words together. Type `mercy OR merciful` when either word should count. Text selected in the editor fills the prompt.
-
-A link while you write: `obsidian/insert-ccc-link.js` is a second QuickAdd user script. It asks for a paragraph number and inserts the link from `ccc-paragraphs.json` at the cursor. `1030, 1032` and `1030-1032` insert several links, separated by ` · `. Set it up the same way as the search script, in its own Macro, for example `Insert CCC link`. Set `FOLDER` in the copy. A number you selected in the editor fills the prompt, and the link replaces it.
-
-Obsidian treats `[` as the start of a property search. A query that requires `[CCC` on the line matches nothing, even when the paragraph contains the word. The script removes brackets before it builds the query. After you change the script, reload Obsidian, then run the command again.
+- **Numbered names.** Siblings are numbered `01`, `02`, … in table-of-contents order so the file list matches the book. A heading with children becomes a folder, and its own page is `00 - Title.md` inside it.
+- **Short labels.** A leading `CHAPTER`, `SECTION`, `Article`, or `Paragraph` becomes `CH.`, `SEC.`, `Art.`, or `Para.` in file names. The heading inside the note keeps the full Vatican title.
+- **Safe file names.** Characters Obsidian rejects are removed, and a colon becomes ` - `.
+- **Navigation.** Previous and next follow the table of contents and skip notes that do not exist. Links use the folder path when a name repeats.
+- **Body.** `[CCC N]` starts each numbered paragraph. Short lines without a final period become `####` headings, indented paragraphs become quotations, and footnotes become `[^N]`.
+- **Downloads.** The program pauses 0.35 seconds between pages and retries failures up to three times.
 
 ## License
 
-The program is [MIT](LICENSE). That license covers this code. It does not cover the Catechism. The text you download remains copyright Libreria Editrice Vaticana.
+The program is [MIT](LICENSE). That license covers this code, not the Catechism, whose text remains copyright Libreria Editrice Vaticana.
